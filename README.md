@@ -1,17 +1,27 @@
-# aastu_student_app
+A high-performance, cross-platform mobile GPA tracker designed for the engineering curriculum at AASTU.
 
-A new Flutter project.
+🚀 Overview
+AASTU GPA Tracker is a lightweight, efficient tool built to help AASTU engineering students monitor their academic standing. Unlike standard calculator apps, this project utilizes a C++ backend for robust computation and a cross-platform mobile interface to provide a seamless experience across devices.
 
-## Getting Started
+✨ Key Features
+Precision Calculation: Uses optimized C++ logic for accurate GPA and credit-hour processing.
 
-This project is a starting point for a Flutter application.
+Cross-Platform Performance: Built with Dart/Flutter for a fluid UI, with native Swift integration for iOS optimization.
 
-A few resources to get you started if this is your first Flutter project:
+Student-Centric Design: Focused on the specific grading structure of AASTU.
 
-- [Learn Flutter](https://docs.flutter.dev/get-started/learn-flutter)
-- [Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Flutter learning resources](https://docs.flutter.dev/reference/learning-resources)
+Modular Architecture: Leverages CMake for clean build management and native compilation.
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+🛠 Tech Stack
+UI/Mobile: Dart, Flutter
+
+Logic Engine: C++ (via FFI/JNI)
+
+Native Integration: Swift (iOS)
+
+Build System: CMake
+
+Web/Resources: HTML/CSS
+
+📈 Why I built this
+As an Engineering student at AASTU, I wanted a tool that didn't just calculate numbers but performed with the speed and precision expected in an engineering environment. By bridging high-performance C++ logic with a modern mobile interface, I created a solution that is both reliable and fast.
