@@ -37,15 +37,31 @@ class PlanSuggestionService {
     required List<Course> courses,
     required double targetCgpa,
     required String plannedStream,
+    Set<String> finishedSlots = const {},
   }) {
     final analysis = _prereq.analyze(courses, profile.currentYear, stream: plannedStream);
     final working = courses.map((c) => Course.cloneOf(c)).toList();
 
-    final earned = _pastTotals(working, profile.currentYear, plannedStream);
+    final earned = _pastTotals(
+      working,
+      profile.currentYear,
+      plannedStream,
+      finishedSlots,
+    );
 
-    _clearPlannableGrades(working, profile.currentYear, plannedStream);
+    _clearPlannableGrades(
+      working,
+      profile.currentYear,
+      plannedStream,
+      finishedSlots,
+    );
 
-    var remainingCh = _remainingCreditHours(working, profile.currentYear, plannedStream);
+    var remainingCh = _remainingCreditHours(
+      working,
+      profile.currentYear,
+      plannedStream,
+      finishedSlots,
+    );
 
     // Failed courses slated for retake: move their CH from earned into the remaining pool.
     final retakeAdjustment = _retakeCreditAdjustment(working, analysis);
@@ -66,6 +82,7 @@ class PlanSuggestionService {
       profile.currentYear,
       plannedStream,
       requiredSemSgpa,
+      finishedSlots,
     );
 
     _calibrateToTarget(
@@ -73,6 +90,7 @@ class PlanSuggestionService {
       profile.currentYear,
       plannedStream,
       targetCgpa,
+      finishedSlots,
     );
 
     final result = _gpa.compute(
@@ -100,18 +118,19 @@ class PlanSuggestionService {
     );
   }
 
-  /// Graded courses strictly before [currentYear] (locked academic history).
+  /// Graded courses strictly before [currentYear] and finished semesters.
   ({double totalGp, int totalCh}) _pastTotals(
     List<Course> courses,
     int currentYear,
     String stream,
+    Set<String> finishedSlots,
   ) {
     final passed = _passedCodes(courses);
     var totalGp = 0.0;
     var totalCh = 0;
 
     for (final c in courses) {
-      if (c.year >= currentYear) continue;
+      if (c.year >= currentYear && !finishedSlots.contains(_slotKey(c))) continue;
       if (c.grade == 'None' || c.grade == 'INC' || c.ch == 0) continue;
       if (!_courseCountsForStream(c, stream)) continue;
       if (c.grade == 'F' && passed.contains(c.code)) continue;
@@ -127,9 +146,11 @@ class PlanSuggestionService {
     List<Course> courses,
     int currentYear,
     String stream,
+    Set<String> finishedSlots,
   ) {
     for (final c in courses) {
       if (c.year < currentYear) continue;
+      if (finishedSlots.contains(_slotKey(c))) continue;
       if (c.grade == 'None' || c.grade == 'INC') continue;
       if (!_courseCountsForStream(c, stream)) continue;
       c.grade = 'None';
@@ -172,10 +193,12 @@ class PlanSuggestionService {
     List<Course> courses,
     int currentYear,
     String stream,
+    Set<String> finishedSlots,
   ) {
     var ch = 0;
     for (final c in courses) {
       if (c.year < currentYear) continue;
+      if (finishedSlots.contains(_slotKey(c))) continue;
       if (c.grade != 'None') continue;
       if (c.ch == 0) continue;
       if (!_courseCountsForStream(c, stream)) continue;
@@ -205,10 +228,12 @@ class PlanSuggestionService {
     int currentYear,
     String stream,
     double requiredSemSgpa,
+    Set<String> finishedSlots,
   ) {
     for (var y = currentYear; y <= 5; y++) {
       for (var s = 1; s <= 2; s++) {
         final semCourses = courses.where((c) {
+          if (finishedSlots.contains(_slotKey(c))) return false;
           if (c.year != y || c.sem != s) return false;
           if (c.grade != 'None') return false;
           if (!_courseCountsForStream(c, stream)) return false;
@@ -231,6 +256,7 @@ class PlanSuggestionService {
     int currentYear,
     String stream,
     double targetCgpa,
+    Set<String> finishedSlots,
   ) {
     const tolerance = 0.015;
 
@@ -241,6 +267,7 @@ class PlanSuggestionService {
       if (diff.abs() <= tolerance) return;
 
       final adjustable = courses.where((c) {
+        if (finishedSlots.contains(_slotKey(c))) return false;
         if (c.year < currentYear) return false;
         if (c.ch == 0) return false;
         if (c.grade == 'None' || c.grade == 'INC') return false;
@@ -372,4 +399,6 @@ class PlanSuggestionService {
     if (gp >= 1.0) return 'D';
     return 'F';
   }
+
+  String _slotKey(Course course) => '${course.year}|${course.sem}';
 }
