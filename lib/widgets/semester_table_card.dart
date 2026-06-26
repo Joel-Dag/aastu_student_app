@@ -43,8 +43,9 @@ class SemesterTableCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     var semGp = 0.0;
-    var semCh = 0;
+    var gradedCh = 0;
     var hasInc = false;
+    final totalCh = courses.where((c) => c.ch > 0).fold<int>(0, (sum, c) => sum + c.ch);
     final passedCodes = courses
         .where((c) => c.grade != 'None' && c.grade != 'INC' && c.grade != 'F')
         .map((c) => c.code)
@@ -54,14 +55,14 @@ class SemesterTableCard extends StatelessWidget {
       if (c.grade == 'INC') hasInc = true;
       if (c.grade == 'None' || c.grade == 'INC' || c.ch == 0) continue;
       if (c.grade == 'F' && passedCodes.contains(c.code)) continue;
-      semCh += c.ch;
+      gradedCh += c.ch;
       semGp += gradingScale[c.grade]! * c.ch;
     }
-    final sgpa = semCh > 0 ? semGp / semCh : (hasInc ? 0.0 : null);
+    final sgpa = gradedCh > 0 ? semGp / gradedCh : (hasInc ? 0.0 : null);
 
     final showCreditRules = manualPlanMode && minCredits != null && maxCredits != null;
     final creditStatus = showCreditRules
-        ? _creditStatus(semCh, minCredits!, maxCredits!)
+        ? _creditStatus(totalCh, minCredits!, maxCredits!)
         : _CreditStatus.ok;
 
     return Card(
@@ -150,7 +151,7 @@ class SemesterTableCard extends StatelessWidget {
                               ),
                             ),
                           Text(
-                            '$semCh CH',
+                            '$totalCh CH',
                             style: TextStyle(
                               color: creditStatus == _CreditStatus.ok
                                   ? Colors.white70

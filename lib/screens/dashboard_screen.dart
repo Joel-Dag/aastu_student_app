@@ -10,8 +10,10 @@ import '../services/plan_suggestion_service.dart';
 import '../services/storage_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/add_course_sheet.dart';
+import '../widgets/grade_dropdown.dart';
 import '../widgets/incomplete_warning_banner.dart';
 import '../widgets/semester_table_card.dart';
+import 'about_us_screen.dart';
 import 'grade_entry_screen.dart';
 import 'onboarding_screen.dart';
 
@@ -26,6 +28,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
   StudentProfile? _profile;
   List<Course> _courses = [];
   Set<String> _lockedSlots = {};
+  Set<String> _finishedSlots = {};
+  bool _internshipLocked = false;
   bool _planApplied = false;
   bool _loading = true;
   String _previewStream = eceStreams.first;
@@ -67,6 +71,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
       await _storage.saveLockedSlots(lockedSlots);
     }
 
+    final finishedSlots = await _storage.loadFinishedSlots();
+    final internshipLocked = await _storage.loadInternshipLocked() ?? false;
     final planApplied = await _storage.isPlanApplied();
     var manualPlan = await _storage.loadManualPlan();
     final stream = profile.effectiveStream();
@@ -99,6 +105,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
       _profile = profile;
       _courses = courses;
       _lockedSlots = lockedSlots;
+      _finishedSlots = finishedSlots;
+      _internshipLocked = internshipLocked;
       _planApplied = planApplied;
       _previewStream = stream;
       _manualPlan = manualPlan;
@@ -141,6 +149,50 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   bool _isSlotLocked(int year, int sem) =>
       _lockedSlots.contains(StorageService.slotKey(year, sem));
+
+  bool _isSlotFinished(int year, int sem) =>
+      _finishedSlots.contains(StorageService.slotKey(year, sem));
+
+  bool _isSlotPast(int year, int sem, int currentYear) {
+    return year < currentYear || _isSlotFinished(year, sem);
+  }
+
+  Future<void> _toggleFinishedSlot(int year, int sem, bool finished) async {
+    final key = StorageService.slotKey(year, sem);
+    setState(() {
+      if (finished) {
+        _finishedSlots.add(key);
+      } else {
+        _finishedSlots.remove(key);
+      }
+    });
+    await _storage.saveFinishedSlots(_finishedSlots);
+    _recomputeAnalysis();
+  }
+
+  String _academicStatusMessage(Set<String> failures, int currentYear) {
+    if (failures.isNotEmpty) return '';
+
+    final unadded = _manualPlanner.countCoursesNotInPlan(
+      allCourses: _courses,
+      stream: _profile!.effectiveStream(_previewStream),
+      plan: _manualPlan,
+    );
+
+    if (unadded == 0) {
+      return 'Keep going on this track and you will graduate on time.';
+    }
+
+    final lag = _estimateSemesterLag(unadded);
+    return 'Keep going on this track. You will graduate on a $lag semester lag if remaining courses are not added yet.';
+  }
+
+  int _estimateSemesterLag(int remainingCourses) {
+    if (remainingCourses <= 2) return 0;
+    if (remainingCourses <= 4) return 1;
+    if (remainingCourses <= 6) return 2;
+    return 3;
+  }
 
   Future<void> _handleGradeChange(Course course, String grade) async {
     if (_isSlotLocked(course.year, course.sem)) return;
@@ -367,6 +419,101 @@ class _DashboardScreenState extends State<DashboardScreen> {
     return _profile!.currentStream ?? _previewStream;
   }
 
+  Course? _findInternshipCourse(String stream) {
+    try {
+      return _courses.firstWhere(
+        (course) => _manualPlanner.isInternship(course) && course.year == 4 && course.sem == 2 && course.stream == stream,
+      );
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Widget _buildInternshipCard(
+    Course internship, {
+    required bool locked,
+    required bool isPreview,
+    required bool manualPlanMode,
+    VoidCallback? onRemove,
+  }) {
+    return Card(
+      margin: const EdgeInsets.only(bottom: 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              gradient: isPreview ? null : AppTheme.heroGradient,
+              color: isPreview ? AppColors.aastuBlueDark.withValues(alpha: 0.6) : null,
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: AppColors.aastuGold.withValues(alpha: 0.2),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Icon(Icons.work_outline, color: AppColors.aastuGold),
+                ),
+                const SizedBox(width: 12),
+                const Expanded(
+                  child: Text(
+                    'Industry Internship',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  ),
+                ),
+                Text(
+                  '${internship.ch} CH',
+                  style: const TextStyle(color: Colors.white70, fontSize: 12),
+                ),
+              ],
+            ),
+          ),
+          Container(
+            padding: const EdgeInsets.all(16),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        internship.name,
+                        style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        '${internship.code} • Year ${internship.year} Sem ${internship.sem}',
+                        style: const TextStyle(color: Colors.white54, fontSize: 11),
+                      ),
+                    ],
+                  ),
+                ),
+                if (onRemove != null)
+                  IconButton(
+                    icon: const Icon(Icons.remove_circle_outline, color: AppColors.warning, size: 20),
+                    tooltip: 'Remove from plan',
+                    onPressed: onRemove,
+                  ),
+                GradeDropdown(
+                  value: internship.grade,
+                  enabled: !locked && !isPreview,
+                  onChanged: (grade) async {
+                    if (locked || isPreview) return;
+                    await _handleGradeChange(internship, grade);
+                  },
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<void> _showSuggestPlanDialog() async {
     if (_profile == null) return;
 
@@ -553,6 +700,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final incCount = _academic.countIncomplete(_courses);
     final anyLocked = _lockedSlots.isNotEmpty;
     final failures = _manualPlanner.unclearedFailures(_courses);
+    final internshipCourse = _findInternshipCourse(stream);
 
     return Scaffold(
       appBar: AppBar(
@@ -569,12 +717,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 Navigator.of(context).push(
                   MaterialPageRoute(builder: (_) => const GradeEntryScreen()),
                 );
+              } else if (v == 'about') {
+                Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => const AboutUsScreen()),
+                );
               } else if (v == 'reset') {
                 _resetApp();
               }
             },
             itemBuilder: (_) => [
               const PopupMenuItem(value: 'edit', child: Text('Edit past grades')),
+              const PopupMenuItem(value: 'about', child: Text('About Us')),
               const PopupMenuItem(value: 'reset', child: Text('Reset app')),
             ],
           ),
@@ -606,12 +759,24 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     : (_planApplied ? 'Planned Future Semesters' : 'Current & Upcoming'),
                 _manualPlan.active ? Icons.edit_calendar : Icons.upcoming,
               ),
-              ...upcomingSlots.map((slot) => _buildSemesterCard(
-                    slot,
-                    stream,
-                    isPast: false,
-                    showPlannedOnly: _planApplied,
-                  )),
+              for (final slot in upcomingSlots) ...[
+                _buildSemesterCard(
+                  slot,
+                  stream,
+                  isPast: false,
+                  showPlannedOnly: _planApplied,
+                ),
+                if (slot.year == 4 && slot.sem == 2 && internshipCourse != null)
+                  _buildInternshipCard(
+                    internshipCourse,
+                    locked: _isSlotLocked(4, 2),
+                    isPreview: 4 > profile.currentYear,
+                    manualPlanMode: _manualPlan.active,
+                    onRemove: _manualPlan.active && _manualPlanner.allPlannedKeys(_manualPlan).contains(internshipCourse.key)
+                        ? () => _removeCourseFromSlot(4, 2, internshipCourse)
+                        : null,
+                  ),
+              ],
             ],
             const SizedBox(height: 80),
           ],
@@ -752,6 +917,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
       if (showPlannedOnly) {
         semCourses = semCourses.where((c) => c.grade != 'None').toList();
         if (semCourses.isEmpty) return const SizedBox.shrink();
+      }
+    }
+
+    if (slot.year == 4 && slot.sem == 2) {
+      semCourses = semCourses.where((c) => !_manualPlanner.isInternship(c)).toList();
+      if (showPlannedOnly && semCourses.isEmpty && !manualPlanMode) {
+        // Keep the semester visible only if there are other planned courses.
       }
     }
 

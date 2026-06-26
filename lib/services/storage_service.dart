@@ -34,6 +34,9 @@ class StorageService {
 
   static const _manualPlanKey = 'manual_plan_state';
 
+  static const _internshipLockedKey = 'internship_locked';
+  static const _finishedSlotsKey = 'finished_semesters';
+
 
 
   static String slotKey(int year, int sem) => '$year|$sem';
@@ -185,6 +188,30 @@ class StorageService {
   }
 
 
+
+  Future<bool?> loadInternshipLocked() async {
+    final prefs = await SharedPreferences.getInstance();
+    if (!prefs.containsKey(_internshipLockedKey)) return null;
+    return prefs.getBool(_internshipLockedKey);
+  }
+
+  Future<void> setInternshipLocked(bool locked) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_internshipLockedKey, locked);
+  }
+
+  Future<Set<String>> loadFinishedSlots() async {
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString(_finishedSlotsKey);
+    if (raw == null) return {};
+    final list = jsonDecode(raw) as List<dynamic>;
+    return list.map((e) => e as String).toSet();
+  }
+
+  Future<void> saveFinishedSlots(Set<String> slots) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_finishedSlotsKey, jsonEncode(slots.toList()));
+  }
 
   Future<void> saveManualPlan(ManualPlanState plan) async {
 

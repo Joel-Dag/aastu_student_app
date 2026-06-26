@@ -209,6 +209,10 @@ class ManualPlanService {
     return false;
   }
 
+  bool isInternship(Course course) {
+    return course.code == 'ECEg4100' || course.name == 'Industry Internship';
+  }
+
   String prereqLabel(Course course, List<Course> curriculum) {
     if (course.prerequisites.isEmpty) return 'No prerequisites';
     final names = course.prerequisites.map((code) {
@@ -232,6 +236,7 @@ class ManualPlanService {
         .where((c) => c.sem == targetSem)
         .where((c) => !passed.contains(c.code))
         .where((c) => !planned.contains(c.key))
+        .where((c) => !isInternship(c))
         .toList();
 
     final bySlot = <String, List<Course>>{};
@@ -286,6 +291,7 @@ class ManualPlanService {
         .where((c) => c.ch > 0)
         .where((c) => !passed.contains(c.code))
         .where((c) => !planned.contains(c.key))
+        .where((c) => !isInternship(c))
         .length;
   }
 
