@@ -166,6 +166,30 @@ class _DashboardScreenState extends State<DashboardScreen> {
     _recomputeAnalysis();
   }
 
+  int _effectiveCurrentYear() {
+    if (_profile == null) return 1;
+
+    final completedSlots = {
+      for (final slot in _academic.pastSemesters(_profile!.currentYear))
+        StorageService.slotKey(slot.year, slot.sem),
+      ..._finishedSlots,
+    };
+
+    var year = 1;
+    var sem = 1;
+    while (year <= 5) {
+      final key = StorageService.slotKey(year, sem);
+      if (!completedSlots.contains(key)) break;
+      if (sem == 1) {
+        sem = 2;
+      } else {
+        year += 1;
+        sem = 1;
+      }
+    }
+    return year;
+  }
+
   List<({int year, int sem})> _outbatchSlots() {
     final slots = _manualPlan.slotCourseKeys.keys
         .where((key) {
@@ -526,6 +550,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     required bool isPreview,
     required bool manualPlanMode,
     VoidCallback? onRemove,
+    VoidCallback? onFinishSemester,
   }) {
     return Card(
       margin: const EdgeInsets.only(bottom: 16),
@@ -588,6 +613,20 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     icon: const Icon(Icons.remove_circle_outline, color: AppColors.warning, size: 20),
                     tooltip: 'Remove from plan',
                     onPressed: onRemove,
+                  ),
+                if (onFinishSemester != null)
+                  Padding(
+                    padding: const EdgeInsets.only(right: 8),
+                    child: OutlinedButton.icon(
+                      onPressed: onFinishSemester,
+                      icon: const Icon(Icons.check_circle_outline, size: 18, color: AppColors.success),
+                      label: const Text('Finished', style: TextStyle(fontSize: 12)),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: AppColors.success,
+                        side: BorderSide(color: AppColors.success.withValues(alpha: 0.5)),
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      ),
+                    ),
                   ),
                 GradeDropdown(
                   value: internship.grade,
@@ -779,16 +818,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
     final profile = _profile!;
     final stream = profile.effectiveStream(_previewStream);
+    final effectiveYear = _effectiveCurrentYear();
     final pastGpa = GpaService.instance.compute(
       _courses,
-      upToYear: profile.currentYear - 1,
+      upToYear: effectiveYear - 1,
     );
     final fullGpa = _planApplied
         ? GpaService.instance.compute(_courses, upToYear: 5, stream: stream)
         : pastGpa;
 
     final pastKeys = {
-      for (final slot in _academic.pastSemesters(profile.currentYear))
+      for (final slot in _academic.pastSemesters(effectiveYear))
         StorageService.slotKey(slot.year, slot.sem),
       ..._finishedSlots,
     };
@@ -808,7 +848,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         final bi = b.year * 2 + b.sem;
         return ai.compareTo(bi);
       });
-    final upcomingSlots = _academic.currentAndFutureSemesters(profile.currentYear)
+    final upcomingSlots = _academic.currentAndFutureSemesters(effectiveYear)
         .where((slot) => !_finishedSlots.contains(StorageService.slotKey(slot.year, slot.sem)))
         .toList();
     final incCount = _academic.countIncomplete(_courses);
@@ -855,7 +895,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         child: ListView(
           padding: const EdgeInsets.all(16),
           children: [
-            _buildHeroCard(profile, pastGpa.cgpa, fullGpa.cgpa, anyLocked),
+            _buildHeroCard(profile, effectiveYear, pastGpa.cgpa, fullGpa.cgpa, anyLocked),
             const SizedBox(height: 16),
             IncompleteWarningBanner(incompleteCount: incCount),
             if (_manualPlan.active) _buildManualPlanBanner(),
@@ -886,16 +926,22 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       ? () => _confirmFinishSemester(slot.year, slot.sem)
                       : null,
                 ),
-                if (slot.year == 4 && slot.sem == 2 && internshipCourse != null)
-                  _buildInternshipCard(
-                    internshipCourse,
-                    locked: _internshipLocked,
-                    isPreview: 4 > profile.currentYear,
-                    manualPlanMode: _manualPlan.active,
-                    onRemove: _manualPlan.active && _manualPlanner.allPlannedKeys(_manualPlan).contains(internshipCourse.key)
-                        ? () => _removeCourseFromSlot(4, 2, internshipCourse)
-                        : null,
-                  ),
+              ],
+              if (internshipCourse != null && !_isSlotFinished(4, 2)) ...[
+                const SizedBox(height: 4),
+                _sectionTitle('Industry Internship', Icons.work_outline),
+                _buildInternshipCard(
+                  internshipCourse,
+                  locked: _internshipLocked,
+                  isPreview: 4 > effectiveYear,
+                  manualPlanMode: _manualPlan.active,
+                  onRemove: _manualPlan.active && _manualPlanner.allPlannedKeys(_manualPlan).contains(internshipCourse.key)
+                      ? () => _removeCourseFromSlot(4, 2, internshipCourse)
+                      : null,
+                  onFinishSemester: !_isSlotFinished(4, 2)
+                      ? () => _confirmFinishSemester(4, 2)
+                      : null,
+                ),
               ],
             ],
             const SizedBox(height: 12),
@@ -1019,6 +1065,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         _manualPlanner.isSlotInPlanRange(_manualPlan, slot.year, slot.sem) &&
         !locked &&
         !isPast;
+    final effectiveYear = _effectiveCurrentYear();
 
     List<Course> semCourses;
     var manualPlanMode = false;
@@ -1057,7 +1104,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       }
     }
 
-    final isFutureYear = slot.year > _profile!.currentYear;
+    final isFutureYear = slot.year > effectiveYear;
     final isPreview = isFutureYear && !showPlannedOnly && !manualPlanMode;
 
     return SemesterTableCard(
@@ -1185,6 +1232,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   Widget _buildHeroCard(
     StudentProfile profile,
+    int displayYear,
     double currentCgpa,
     double projectedCgpa,
     bool anyLocked,
@@ -1210,7 +1258,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.white),
           ),
           Text(
-            '${profile.department} • Year ${profile.currentYear}'
+            '${profile.department} • Year $displayYear'
             '${profile.currentStream != null ? ' • ${profile.currentStream}' : ''}',
             style: const TextStyle(color: Colors.white70, fontSize: 12),
           ),
