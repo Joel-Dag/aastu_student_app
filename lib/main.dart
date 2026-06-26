@@ -5,6 +5,7 @@ import 'screens/grade_entry_screen.dart';
 import 'screens/onboarding_screen.dart';
 import 'services/storage_service.dart';
 import 'theme/app_theme.dart';
+import 'widgets/splash_screen.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -43,14 +44,23 @@ class _AppBootstrapperState extends State<AppBootstrapper> {
 
   Future<void> _resolveStartScreen() async {
     final storage = StorageService.instance;
-    final onboarded = await storage.hasOnboarded();
+
+    final results = await Future.wait([
+      storage.hasOnboarded(),
+      storage.loadGrades(),
+      Future<void>.delayed(const Duration(milliseconds: 1200)),
+    ]);
+
+    final onboarded = results[0] as bool;
+    final grades = results[1] as Map<String, String>;
+
+    if (!mounted) return;
 
     if (!onboarded) {
       setState(() => _destination = const OnboardingScreen());
       return;
     }
 
-    final grades = await storage.loadGrades();
     if (grades.isEmpty) {
       setState(() => _destination = const GradeEntryScreen(isFirstRun: true));
       return;
@@ -62,11 +72,7 @@ class _AppBootstrapperState extends State<AppBootstrapper> {
   @override
   Widget build(BuildContext context) {
     if (_destination == null) {
-      return const Scaffold(
-        body: Center(
-          child: CircularProgressIndicator(color: AppColors.aastuGold),
-        ),
-      );
+      return const SplashScreen();
     }
     return _destination!;
   }

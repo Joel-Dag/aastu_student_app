@@ -96,8 +96,11 @@ class PrerequisiteService {
         (c) => c.code == code && c.grade == 'F',
         orElse: () => codeToCourse[code]!,
       );
+      final earliestYear = original.year + 1;
+      final fromYear =
+          currentYear > earliestYear ? currentYear : earliestYear;
       final slot = _nextRetakeSlot(
-        currentYear,
+        fromYear,
         original.sem,
         occupied,
         code,

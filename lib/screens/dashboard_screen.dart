@@ -1,13 +1,15 @@
 import 'package:flutter/material.dart';
 
 import '../models/course.dart';
+import '../models/manual_plan_state.dart';
 import '../models/student_profile.dart';
 import '../services/academic_service.dart';
 import '../services/gpa_service.dart';
+import '../services/manual_plan_service.dart';
 import '../services/plan_suggestion_service.dart';
-import '../services/prerequisite_service.dart';
 import '../services/storage_service.dart';
 import '../theme/app_theme.dart';
+import '../widgets/add_course_sheet.dart';
 import '../widgets/incomplete_warning_banner.dart';
 import '../widgets/semester_table_card.dart';
 import 'grade_entry_screen.dart';
@@ -27,11 +29,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
   bool _planApplied = false;
   bool _loading = true;
   String _previewStream = eceStreams.first;
-  PrerequisiteAnalysis? _analysis;
+  ManualPlanState _manualPlan = const ManualPlanState();
+  int _coursesNotInPlan = 0;
 
   final _academic = AcademicService.instance;
   final _storage = StorageService.instance;
   final _plan = PlanSuggestionService.instance;
+  final _manualPlanner = ManualPlanService.instance;
 
   @override
   void initState() {
@@ -64,28 +68,200 @@ class _DashboardScreenState extends State<DashboardScreen> {
     }
 
     final planApplied = await _storage.isPlanApplied();
+    var manualPlan = await _storage.loadManualPlan();
+    final stream = profile.effectiveStream();
 
+    final blocking = _manualPlanner.blockingFailures(courses, courses);
+    if (blocking.isNotEmpty) {
+      final activated = _manualPlanner.activatePlan(
+        current: manualPlan,
+        blocking: blocking,
+      );
+      if (activated.active) {
+        final firstActivation = !manualPlan.active;
+        manualPlan = activated;
+        if (firstActivation) {
+          manualPlan = _stripSlotsInRange(manualPlan);
+        }
+        _manualPlanner.clearUnlockedFutureGrades(
+          courses: courses,
+          plan: manualPlan,
+          lockedSlots: lockedSlots,
+          stream: stream,
+        );
+        await _storage.saveManualPlan(manualPlan);
+        await _storage.saveGrades(_academic.extractGrades(courses));
+      }
+    }
+
+    if (!mounted) return;
     setState(() {
       _profile = profile;
       _courses = courses;
       _lockedSlots = lockedSlots;
       _planApplied = planApplied;
-      _previewStream = profile.effectiveStream();
-      _analysis = PrerequisiteService.instance.analyze(
-        courses,
-        profile.currentYear,
-        stream: profile.effectiveStream(_previewStream),
-      );
+      _previewStream = stream;
+      _manualPlan = manualPlan;
       _loading = false;
     });
+    _recomputeAnalysis();
+  }
+
+  ManualPlanState _stripSlotsInRange(ManualPlanState plan) {
+    final kept = <String, List<String>>{};
+    for (final entry in plan.slotCourseKeys.entries) {
+      final parts = entry.key.split('|');
+      if (parts.length != 2) continue;
+      final y = int.tryParse(parts[0]);
+      final s = int.tryParse(parts[1]);
+      if (y == null || s == null) continue;
+      if (_manualPlanner.isSlotInPlanRange(plan, y, s)) continue;
+      kept[entry.key] = List.from(entry.value);
+    }
+    return plan.copyWith(slotCourseKeys: kept);
   }
 
   Future<void> _persist() async {
     await _storage.saveGrades(_academic.extractGrades(_courses));
   }
 
+  Future<void> _persistManualPlan() async {
+    await _storage.saveManualPlan(_manualPlan);
+  }
+
+  void _recomputeAnalysis() {
+    if (_profile == null) return;
+    final stream = _profile!.effectiveStream(_previewStream);
+    _coursesNotInPlan = _manualPlanner.countCoursesNotInPlan(
+      allCourses: _courses,
+      stream: stream,
+      plan: _manualPlan,
+    );
+  }
+
   bool _isSlotLocked(int year, int sem) =>
       _lockedSlots.contains(StorageService.slotKey(year, sem));
+
+  Future<void> _handleGradeChange(Course course, String grade) async {
+    if (_isSlotLocked(course.year, course.sem)) return;
+
+    final prevManualActive = _manualPlan.active;
+
+    setState(() {
+      final idx = _courses.indexWhere((c) => c.key == course.key);
+      if (idx >= 0) _courses[idx].grade = grade;
+    });
+    await _persist();
+
+    if (grade == 'F') {
+      if (!_manualPlanner.isPrerequisiteForAny(course.code, _courses)) {
+        setState(() => _recomputeAnalysis());
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                '${course.name} marked as F. This is not a prerequisite for other courses — your semester cards are unchanged.',
+              ),
+              backgroundColor: AppColors.warning,
+            ),
+          );
+        }
+        return;
+      }
+      await _activateManualPlanning(showAlert: !prevManualActive);
+      return;
+    }
+  }
+
+  Future<void> _activateManualPlanning({required bool showAlert}) async {
+    if (_profile == null) return;
+    final stream = _profile!.effectiveStream(_previewStream);
+    final blocking = _manualPlanner.blockingFailures(_courses, _courses);
+    if (blocking.isEmpty) return;
+
+    var plan = _manualPlanner.activatePlan(
+      current: _manualPlan,
+      blocking: blocking,
+    );
+    if (!plan.active) return;
+
+    if (!_manualPlan.active) {
+      plan = _stripSlotsInRange(plan);
+    }
+
+    _manualPlanner.clearUnlockedFutureGrades(
+      courses: _courses,
+      plan: plan,
+      lockedSlots: _lockedSlots,
+      stream: stream,
+    );
+
+    setState(() {
+      _manualPlan = plan;
+      _recomputeAnalysis();
+    });
+
+    await _persist();
+    await _persistManualPlan();
+
+    if (showAlert && mounted) {
+      final names = blocking.map((c) => c.name).join(', ');
+      await showDialog<void>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          backgroundColor: AppColors.cardDark,
+          title: const Text('Plan Your Remaining Semesters'),
+          content: Text(
+            'You failed $names, which is a prerequisite for future courses. '
+            'Unlocked semesters from Year ${plan.clearFromYear} Sem ${plan.clearFromSem} onward have been cleared. '
+            'Use Add Course on each semester to build your custom graduation plan.',
+          ),
+          actions: [
+            ElevatedButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Got it'),
+            ),
+          ],
+        ),
+      );
+    }
+  }
+
+  Future<void> _addCourseToSlot(int year, int sem, Course course) async {
+    setState(() {
+      _manualPlan = _manualPlanner.addCourseToSlot(
+        plan: _manualPlan,
+        year: year,
+        sem: sem,
+        courseKey: course.key,
+      );
+      final idx = _courses.indexWhere((c) => c.key == course.key);
+      if (idx >= 0 && _courses[idx].grade != 'F') {
+        _courses[idx].grade = 'None';
+      }
+      _recomputeAnalysis();
+    });
+    await _persistManualPlan();
+    await _persist();
+  }
+
+  Future<void> _removeCourseFromSlot(int year, int sem, Course course) async {
+    setState(() {
+      _manualPlan = _manualPlanner.removeCourseFromSlot(
+        plan: _manualPlan,
+        year: year,
+        sem: sem,
+        courseKey: course.key,
+      );
+      if (!_manualPlanner.allPlannedKeys(_manualPlan).contains(course.key)) {
+        final idx = _courses.indexWhere((c) => c.key == course.key);
+        if (idx >= 0) _courses[idx].grade = 'None';
+      }
+      _recomputeAnalysis();
+    });
+    await _persistManualPlan();
+    await _persist();
+  }
 
   Future<void> _showLockDialog() async {
     if (_profile == null) return;
@@ -175,36 +351,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
     await _storage.saveProfile(updated);
     setState(() {
       _profile = updated;
-      _analysis = PrerequisiteService.instance.analyze(
-        _courses,
-        updated.currentYear,
-        stream: stream,
-      );
+      _recomputeAnalysis();
     });
-  }
-
-  void _updateGrade(Course course, String grade) {
-    if (_isSlotLocked(course.year, course.sem)) return;
-    setState(() {
-      final idx = _courses.indexWhere((c) => c.key == course.key);
-      if (idx >= 0) _courses[idx].grade = grade;
-      _analysis = PrerequisiteService.instance.analyze(
-        _courses,
-        _profile!.currentYear,
-        stream: _profile!.effectiveStream(_previewStream),
-      );
-    });
-    _persist();
   }
 
   void _onPreviewStreamChanged(String stream) {
     setState(() {
       _previewStream = stream;
-      _analysis = PrerequisiteService.instance.analyze(
-        _courses,
-        _profile!.currentYear,
-        stream: stream,
-      );
+      _recomputeAnalysis();
     });
     _savePreviewStream(stream);
   }
@@ -324,7 +478,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
       _courses = result.updatedCourses;
       _planApplied = true;
       _previewStream = stream;
-      _analysis = result.prerequisiteAnalysis;
     });
 
     await _persist();
@@ -343,29 +496,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         backgroundColor: AppColors.cardDark,
         title: Text(result.success ? 'Plan Ready' : 'Best Effort Plan'),
         content: SingleChildScrollView(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(result.message),
-              const SizedBox(height: 8),
-              Text(
-                'Required average SGPA per remaining semester: '
-                '${result.requiredSemSgpa.toStringAsFixed(2)}',
-                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
-              ),
-              if (result.prerequisiteAnalysis.retakeSchedule.isNotEmpty) ...[
-                const SizedBox(height: 12),
-                const Text('Retake schedule:', style: TextStyle(fontWeight: FontWeight.bold)),
-                ...result.prerequisiteAnalysis.retakeSchedule.map(
-                  (r) => Text(
-                    '• ${r.code} → Year ${r.scheduledYear} Sem ${r.scheduledSem}',
-                    style: const TextStyle(fontSize: 12),
-                  ),
-                ),
-              ],
-            ],
-          ),
+          child: Text(result.message),
         ),
         actions: [
           ElevatedButton(onPressed: () => Navigator.pop(ctx), child: const Text('View Dashboard')),
@@ -421,6 +552,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final upcomingSlots = _academic.currentAndFutureSemesters(profile.currentYear);
     final incCount = _academic.countIncomplete(_courses);
     final anyLocked = _lockedSlots.isNotEmpty;
+    final failures = _manualPlanner.unclearedFailures(_courses);
 
     return Scaffold(
       appBar: AppBar(
@@ -457,7 +589,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
             _buildHeroCard(profile, pastGpa.cgpa, fullGpa.cgpa, anyLocked),
             const SizedBox(height: 16),
             IncompleteWarningBanner(incompleteCount: incCount),
-            if (_analysis != null) _buildPrereqCard(_analysis!),
+            if (_manualPlan.active) _buildManualPlanBanner(),
+            if (failures.isNotEmpty || _manualPlan.active) _buildStatusCard(failures),
             const SizedBox(height: 16),
             _buildSgpaSection(pastGpa),
             const SizedBox(height: 24),
@@ -468,8 +601,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
             if (upcomingSlots.isNotEmpty) ...[
               const SizedBox(height: 8),
               _sectionTitle(
-                _planApplied ? 'Planned Future Semesters' : 'Current & Upcoming',
-                _planApplied ? Icons.timeline : Icons.upcoming,
+                _manualPlan.active
+                    ? 'Plan Your Remaining Semesters'
+                    : (_planApplied ? 'Planned Future Semesters' : 'Current & Upcoming'),
+                _manualPlan.active ? Icons.edit_calendar : Icons.upcoming,
               ),
               ...upcomingSlots.map((slot) => _buildSemesterCard(
                     slot,
@@ -492,6 +627,91 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
+  Widget _buildManualPlanBanner() {
+    return Card(
+      color: AppColors.aastuBlueDark.withValues(alpha: 0.5),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Row(
+          children: [
+            const Icon(Icons.edit_calendar, color: AppColors.aastuGold),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Custom graduation plan active',
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    _coursesNotInPlan > 0
+                        ? '$_coursesNotInPlan course(s) not yet added to your plan.'
+                        : 'All required courses are in your plan.',
+                    style: const TextStyle(color: Colors.white70, fontSize: 12),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildStatusCard(Set<String> failures) {
+    final blocking = _manualPlanner.blockingFailures(_courses, _courses);
+    final nonBlocking = failures
+        .where((code) => !_manualPlanner.isPrerequisiteForAny(code, _courses))
+        .toList();
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(
+                  blocking.isNotEmpty ? Icons.warning_amber_rounded : Icons.info_outline,
+                  color: blocking.isNotEmpty ? AppColors.warning : AppColors.aastuBlueLight,
+                ),
+                const SizedBox(width: 8),
+                const Text('Academic Status', style: TextStyle(fontWeight: FontWeight.bold)),
+              ],
+            ),
+            if (blocking.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Text(
+                'You failed ${blocking.map((c) => c.name).join(', ')} — prerequisite course(s). '
+                'Build your remaining semesters using Add Course on each unlocked card.',
+                style: const TextStyle(color: AppColors.warning, fontSize: 13),
+              ),
+            ],
+            if (nonBlocking.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Text(
+                'Failed (no prerequisite impact): ${nonBlocking.join(', ')}. '
+                'Retake when available; your semester cards are unchanged.',
+                style: const TextStyle(color: Colors.white70, fontSize: 12),
+              ),
+            ],
+            if (failures.isEmpty && _manualPlan.active)
+              const Padding(
+                padding: EdgeInsets.only(top: 8),
+                child: Text(
+                  'Continue adding courses to complete your graduation plan.',
+                  style: TextStyle(color: Colors.white70, fontSize: 13),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildSemesterCard(
     ({int year, int sem}) slot,
     String stream, {
@@ -499,30 +719,74 @@ class _DashboardScreenState extends State<DashboardScreen> {
     bool showPlannedOnly = false,
   }) {
     final slotStream = _streamForSlot(slot.year, slot.sem);
-    var semCourses = _academic.coursesForSemester(
-      _courses, slot.year, slot.sem, slotStream,
-    );
+    final locked = _isSlotLocked(slot.year, slot.sem);
+    final inManualRange = _manualPlan.active &&
+        _manualPlanner.isSlotInPlanRange(_manualPlan, slot.year, slot.sem) &&
+        !locked &&
+        !isPast;
 
-    if (showPlannedOnly) {
-      semCourses = semCourses.where((c) => c.grade != 'None').toList();
-      if (semCourses.isEmpty) return const SizedBox.shrink();
+    List<Course> semCourses;
+    var manualPlanMode = false;
+    int? minCredits;
+    int? maxCredits;
+
+    if (inManualRange) {
+      semCourses = _manualPlanner.coursesForSlot(
+        plan: _manualPlan,
+        allCourses: _courses,
+        year: slot.year,
+        sem: slot.sem,
+      );
+      manualPlanMode = true;
+      minCredits = ManualPlanService.minCreditHours;
+      maxCredits = _manualPlanner.maxCreditsFor(
+        slot.year,
+        GpaService.instance
+            .compute(_courses, upToYear: _profile!.currentYear - 1)
+            .cgpa,
+      );
+    } else {
+      semCourses = _academic.coursesForSemester(
+        _courses, slot.year, slot.sem, slotStream,
+      );
+      if (showPlannedOnly) {
+        semCourses = semCourses.where((c) => c.grade != 'None').toList();
+        if (semCourses.isEmpty) return const SizedBox.shrink();
+      }
     }
 
-    final locked = _isSlotLocked(slot.year, slot.sem);
     final isFutureYear = slot.year > _profile!.currentYear;
-    final isPreview = isFutureYear && !showPlannedOnly;
+    final isPreview = isFutureYear && !showPlannedOnly && !manualPlanMode;
 
     return SemesterTableCard(
       year: slot.year,
       sem: slot.sem,
       courses: semCourses,
-      locked: locked || showPlannedOnly,
+      locked: locked || (showPlannedOnly && !manualPlanMode),
       isPreview: isPreview,
+      manualPlanMode: manualPlanMode,
+      minCredits: minCredits,
+      maxCredits: maxCredits,
       selectedStream: _academic.isStreamSemester(slot.year, slot.sem) ? slotStream : null,
       onStreamChanged: _academic.isStreamSemester(slot.year, slot.sem) && !showPlannedOnly
           ? _onPreviewStreamChanged
           : null,
-      onGradeChanged: locked || showPlannedOnly || isPreview ? (_, _) {} : _updateGrade,
+      onGradeChanged: locked || isPreview ? (_, _) {} : _handleGradeChange,
+      onAddCourse: manualPlanMode
+          ? () => showAddCourseSheet(
+                context: context,
+                allCourses: _courses,
+                stream: slotStream,
+                targetYear: slot.year,
+                targetSem: slot.sem,
+                plan: _manualPlan,
+                failures: _manualPlanner.unclearedFailures(_courses),
+                onCourseSelected: (c) => _addCourseToSlot(slot.year, slot.sem, c),
+              )
+          : null,
+      onRemoveCourse: manualPlanMode
+          ? (c) => _removeCourseFromSlot(slot.year, slot.sem, c)
+          : null,
     );
   }
 
@@ -626,40 +890,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
             ),
           ),
         ],
-      ),
-    );
-  }
-
-  Widget _buildPrereqCard(PrerequisiteAnalysis analysis) {
-    final hasIssues = analysis.unclearedFailures.isNotEmpty;
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Icon(
-                  hasIssues ? Icons.warning_amber_rounded : Icons.check_circle,
-                  color: hasIssues ? AppColors.warning : AppColors.success,
-                ),
-                const SizedBox(width: 8),
-                const Text('Prerequisite Analysis', style: TextStyle(fontWeight: FontWeight.bold)),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Text(analysis.summary, style: const TextStyle(color: Colors.white70, fontSize: 13)),
-            if (analysis.lagSemesters > 0)
-              Padding(
-                padding: const EdgeInsets.only(top: 8),
-                child: Text(
-                  'Estimated lag: ${analysis.lagSemesters} semester(s)',
-                  style: const TextStyle(color: AppColors.warning, fontWeight: FontWeight.bold, fontSize: 12),
-                ),
-              ),
-          ],
-        ),
       ),
     );
   }
