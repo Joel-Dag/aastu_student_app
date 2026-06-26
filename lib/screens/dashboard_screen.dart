@@ -188,8 +188,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
     }
   }
 
-  String _academicStatusMessage(Set<String> failures, int currentYear) {
-    if (failures.isNotEmpty) return '';
+  String _academicStatusMessage(Set<String> failures, int incompleteCount) {
+    if (failures.isNotEmpty || incompleteCount > 0) return '';
 
     final unadded = _manualPlanner.countCoursesNotInPlan(
       allCourses: _courses,
@@ -758,7 +758,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final anyLocked = _lockedSlots.isNotEmpty;
     final failures = _manualPlanner.unclearedFailures(_courses);
     final internshipCourse = _findInternshipCourse(stream);
-    final statusMessage = _academicStatusMessage(failures);
+    final statusMessage = _academicStatusMessage(failures, incCount);
 
     return Scaffold(
       appBar: AppBar(
