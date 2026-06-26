@@ -1115,7 +1115,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       year: slot.year,
       sem: slot.sem,
       courses: semCourses,
-      locked: locked || (showPlannedOnly && !manualPlanMode),
+      locked: locked,
       isPreview: isPreview,
       manualPlanMode: manualPlanMode,
       minCredits: minCredits,
