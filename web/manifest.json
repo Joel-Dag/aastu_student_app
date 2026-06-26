@@ -1,6 +1,6 @@
 {
-    "name": "aastu_student_app",
-    "short_name": "aastu_student_app",
+    "name": "Student Guide",
+    "short_name": "Student Guide",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",
