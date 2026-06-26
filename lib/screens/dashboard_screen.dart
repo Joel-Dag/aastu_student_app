@@ -1093,19 +1093,23 @@ class _DashboardScreenState extends State<DashboardScreen> {
       );
       if (showPlannedOnly) {
         semCourses = semCourses.where((c) => c.grade != 'None').toList();
-        if (semCourses.isEmpty) return const SizedBox.shrink();
+        if (semCourses.isEmpty && !(slot.year == 4 && slot.sem == 2)) {
+          return const SizedBox.shrink();
+        }
       }
     }
 
     if (slot.year == 4 && slot.sem == 2) {
       semCourses = semCourses.where((c) => !_manualPlanner.isInternship(c)).toList();
       if (showPlannedOnly && semCourses.isEmpty && !manualPlanMode) {
-        // Keep the semester visible only if there are other planned courses.
+        // Keep the semester visible so the Year 4 Sem 2 card can still show finish controls.
       }
     }
 
     final isFutureYear = slot.year > effectiveYear;
     final isPreview = isFutureYear && !showPlannedOnly && !manualPlanMode;
+    final isSlotViewable = !showPlannedOnly || semCourses.isNotEmpty || (slot.year == 4 && slot.sem == 2);
+    if (!isSlotViewable) return const SizedBox.shrink();
 
     return SemesterTableCard(
       year: slot.year,
