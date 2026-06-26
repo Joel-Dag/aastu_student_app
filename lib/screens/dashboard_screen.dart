@@ -860,7 +860,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('AASTU Student Guide'),
+        title: const Text('Student Guide'),
         actions: [
           IconButton(
             icon: Icon(anyLocked ? Icons.lock : Icons.lock_open),

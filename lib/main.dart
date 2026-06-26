@@ -18,7 +18,7 @@ class AastuStudentGuideApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'AASTU Student Guide',
+      title: 'Student Guide',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.darkTheme,
       home: const AppBootstrapper(),
