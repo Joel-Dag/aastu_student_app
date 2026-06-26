@@ -320,6 +320,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
     final slots = _academic.lockableSemesters(_profile!.currentYear);
     final selected = Set<String>.from(_lockedSlots);
+    var internshipLocked = _internshipLocked;
 
     final saved = await showDialog<bool>(
       context: context,
@@ -338,6 +339,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     const Text(
                       'Select which years and semesters to lock. Locked semesters cannot be edited.',
                       style: TextStyle(color: Colors.white70, fontSize: 13),
+                    ),
+                    const SizedBox(height: 16),
+                    CheckboxListTile(
+                      value: internshipLocked,
+                      activeColor: AppColors.aastuGold,
+                      title: const Text('Lock Industry Internship grade'),
+                      onChanged: (v) {
+                        setDialog(() {
+                          internshipLocked = v == true;
+                        });
+                      },
                     ),
                     const SizedBox(height: 16),
                     Flexible(
@@ -381,8 +393,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
     if (saved != true) return;
 
-    setState(() => _lockedSlots = selected);
+    setState(() {
+      _lockedSlots = selected;
+      _internshipLocked = internshipLocked;
+    });
     await _storage.saveLockedSlots(selected);
+    await _storage.setInternshipLocked(internshipLocked);
 
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
@@ -695,12 +711,35 @@ class _DashboardScreenState extends State<DashboardScreen> {
         ? GpaService.instance.compute(_courses, upToYear: 5, stream: stream)
         : pastGpa;
 
-    final pastSlots = _academic.pastSemesters(profile.currentYear);
-    final upcomingSlots = _academic.currentAndFutureSemesters(profile.currentYear);
+    final pastKeys = {
+      for (final slot in _academic.pastSemesters(profile.currentYear))
+        StorageService.slotKey(slot.year, slot.sem),
+      ..._finishedSlots,
+    };
+    final pastSlots = pastKeys
+        .map((key) {
+          final parts = key.split('|');
+          if (parts.length != 2) return null;
+          final year = int.tryParse(parts[0]);
+          final sem = int.tryParse(parts[1]);
+          if (year == null || sem == null) return null;
+          return (year: year, sem: sem);
+        })
+        .whereType<({int year, int sem})>()
+        .toList()
+      ..sort((a, b) {
+        final ai = a.year * 2 + a.sem;
+        final bi = b.year * 2 + b.sem;
+        return ai.compareTo(bi);
+      });
+    final upcomingSlots = _academic.currentAndFutureSemesters(profile.currentYear)
+        .where((slot) => !_finishedSlots.contains(StorageService.slotKey(slot.year, slot.sem)))
+        .toList();
     final incCount = _academic.countIncomplete(_courses);
     final anyLocked = _lockedSlots.isNotEmpty;
     final failures = _manualPlanner.unclearedFailures(_courses);
     final internshipCourse = _findInternshipCourse(stream);
+    final statusMessage = _academicStatusMessage(failures);
 
     return Scaffold(
       appBar: AppBar(
@@ -743,7 +782,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
             const SizedBox(height: 16),
             IncompleteWarningBanner(incompleteCount: incCount),
             if (_manualPlan.active) _buildManualPlanBanner(),
-            if (failures.isNotEmpty || _manualPlan.active) _buildStatusCard(failures),
+            if (failures.isNotEmpty || _manualPlan.active || statusMessage.isNotEmpty)
+              _buildStatusCard(failures, statusMessage),
             const SizedBox(height: 16),
             _buildSgpaSection(pastGpa),
             const SizedBox(height: 24),
@@ -765,6 +805,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   stream,
                   isPast: false,
                   showPlannedOnly: _planApplied,
+                  onFinishSemester: !_isSlotFinished(slot.year, slot.sem)
+                      ? () => _confirmFinishSemester(slot.year, slot.sem)
+                      : null,
                 ),
                 if (slot.year == 4 && slot.sem == 2 && internshipCourse != null)
                   _buildInternshipCard(
@@ -825,7 +868,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  Widget _buildStatusCard(Set<String> failures) {
+  Widget _buildStatusCard(Set<String> failures, String statusMessage) {
     final blocking = _manualPlanner.blockingFailures(_courses, _courses);
     final nonBlocking = failures
         .where((code) => !_manualPlanner.isPrerequisiteForAny(code, _courses))
@@ -863,7 +906,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 style: const TextStyle(color: Colors.white70, fontSize: 12),
               ),
             ],
-            if (failures.isEmpty && _manualPlan.active)
+            if (statusMessage.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Text(
+                statusMessage,
+                style: const TextStyle(color: Colors.white70, fontSize: 13),
+              ),
+            ],
+            if (failures.isEmpty && _manualPlan.active && statusMessage.isEmpty)
               const Padding(
                 padding: EdgeInsets.only(top: 8),
                 child: Text(
@@ -882,6 +932,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     String stream, {
     required bool isPast,
     bool showPlannedOnly = false,
+    VoidCallback? onFinishSemester,
   }) {
     final slotStream = _streamForSlot(slot.year, slot.sem);
     final locked = _isSlotLocked(slot.year, slot.sem);
