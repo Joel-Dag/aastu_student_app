@@ -196,7 +196,7 @@ class ManualPlanService {
 
   int maxCreditsFor(int year, double priorCgpa) {
     if (year < 5) return maxCreditHoursDefault;
-    if (priorCgpa > cgpaThresholdForExtraCredits) {
+    if (year == 5 && priorCgpa > cgpaThresholdForExtraCredits) {
       return maxCreditHoursYear5WithCgpa;
     }
     return maxCreditHoursDefault;

@@ -265,16 +265,36 @@ class SemesterTableCard extends StatelessWidget {
                   ),
                   if (manualPlanMode && onAddCourse != null && !locked) ...[
                     const SizedBox(height: 16),
-                    OutlinedButton.icon(
-                      onPressed: onAddCourse,
-                      icon: const Icon(Icons.add, color: AppColors.aastuGold),
-                      label: const Text('Add Course'),
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: AppColors.aastuGold,
-                        side: BorderSide(
-                          color: AppColors.aastuGold.withValues(alpha: 0.5),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton.icon(
+                            onPressed: onAddCourse,
+                            icon: const Icon(Icons.add, color: AppColors.aastuGold),
+                            label: const Text('Add Course'),
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: AppColors.aastuGold,
+                              side: BorderSide(
+                                color: AppColors.aastuGold.withValues(alpha: 0.5),
+                              ),
+                            ),
+                          ),
                         ),
-                      ),
+                        if (onFinishSemester != null) ...[
+                          const SizedBox(width: 12),
+                          OutlinedButton.icon(
+                            onPressed: onFinishSemester,
+                            icon: const Icon(Icons.check_circle_outline, color: AppColors.success),
+                            label: const Text('Finished'),
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: AppColors.success,
+                              side: BorderSide(
+                                color: AppColors.success.withValues(alpha: 0.5),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ],
                     ),
                   ],
                 ],
@@ -293,16 +313,36 @@ class SemesterTableCard extends StatelessWidget {
           if (manualPlanMode && courses.isNotEmpty && onAddCourse != null && !locked)
             Padding(
               padding: const EdgeInsets.all(12),
-              child: OutlinedButton.icon(
-                onPressed: onAddCourse,
-                icon: const Icon(Icons.add, size: 18, color: AppColors.aastuGold),
-                label: const Text('Add Course'),
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: AppColors.aastuGold,
-                  side: BorderSide(
-                    color: AppColors.aastuGold.withValues(alpha: 0.5),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: onAddCourse,
+                      icon: const Icon(Icons.add, size: 18, color: AppColors.aastuGold),
+                      label: const Text('Add Course'),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: AppColors.aastuGold,
+                        side: BorderSide(
+                          color: AppColors.aastuGold.withValues(alpha: 0.5),
+                        ),
+                      ),
+                    ),
                   ),
-                ),
+                  if (onFinishSemester != null) ...[
+                    const SizedBox(width: 12),
+                    OutlinedButton.icon(
+                      onPressed: onFinishSemester,
+                      icon: const Icon(Icons.check_circle_outline, color: AppColors.success),
+                      label: const Text('Finished'),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: AppColors.success,
+                        side: BorderSide(
+                          color: AppColors.success.withValues(alpha: 0.5),
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
               ),
             ),
         ],
