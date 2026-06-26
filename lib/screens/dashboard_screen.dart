@@ -166,6 +166,54 @@ class _DashboardScreenState extends State<DashboardScreen> {
     _recomputeAnalysis();
   }
 
+  List<({int year, int sem})> _outbatchSlots() {
+    final slots = _manualPlan.slotCourseKeys.keys
+        .where((key) {
+          final parts = key.split('|');
+          if (parts.length != 2) return false;
+          final year = int.tryParse(parts[0]);
+          return year != null && year > 5;
+        })
+        .map((key) {
+          final parts = key.split('|');
+          return (year: int.parse(parts[0]), sem: int.parse(parts[1]));
+        })
+        .toList();
+    slots.sort((a, b) {
+      final ai = a.year * 2 + a.sem;
+      final bi = b.year * 2 + b.sem;
+      return ai.compareTo(bi);
+    });
+    return slots;
+  }
+
+  ({int year, int sem}) _nextOutbatchSlot() {
+    final slots = _outbatchSlots();
+    if (slots.isEmpty) return (year: 6, sem: 1);
+    final last = slots.last;
+    if (last.sem == 1) return (year: last.year, sem: 2);
+    return (year: last.year + 1, sem: 1);
+  }
+
+  Future<void> _addOutbatchSemesterSlot() async {
+    final nextSlot = _nextOutbatchSlot();
+    final updatedSlots = Map<String, List<String>>.from(_manualPlan.slotCourseKeys);
+    updatedSlots.putIfAbsent(
+      StorageService.slotKey(nextSlot.year, nextSlot.sem),
+      () => <String>[],
+    );
+
+    setState(() {
+      _manualPlan = _manualPlan.copyWith(
+        active: true,
+        clearFromYear: _manualPlan.active ? _manualPlan.clearFromYear : nextSlot.year,
+        clearFromSem: _manualPlan.active ? _manualPlan.clearFromSem : nextSlot.sem,
+        slotCourseKeys: updatedSlots,
+      );
+    });
+    await _persistManualPlan();
+  }
+
   Future<void> _confirmFinishSemester(int year, int sem) async {
     final confirmed = await showDialog<bool>(
       context: context,
