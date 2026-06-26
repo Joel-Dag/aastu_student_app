@@ -215,6 +215,9 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
           const SizedBox(height: 24),
           DropdownButtonFormField<String>(
             initialValue: _department,
+            isDense: true,
+            isExpanded: true,
+            itemHeight: 48,
             decoration: const InputDecoration(labelText: 'Department'),
             items: departments
                 .map((d) {
@@ -222,11 +225,14 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                   return DropdownMenuItem(
                     value: d,
                     enabled: !isComingSoon,
-                    child: Text(
-                      isComingSoon ? '$d (Coming soon)' : d,
-                      style: TextStyle(
-                        fontSize: 14,
-                        color: isComingSoon ? Colors.white38 : null,
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 4),
+                      child: Text(
+                        isComingSoon ? '$d (Coming soon)' : d,
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: isComingSoon ? Colors.white38 : null,
+                        ),
                       ),
                     ),
                   );
