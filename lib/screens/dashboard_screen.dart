@@ -257,7 +257,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   Future<void> _handleGradeChange(Course course, String grade) async {
-    if (_isSlotLocked(course.year, course.sem)) return;
+    final isInternship = _manualPlanner.isInternship(course);
+    final slotLocked = _isSlotLocked(course.year, course.sem);
+    if (slotLocked && !isInternship) return;
+    if (isInternship && _internshipLocked) return;
 
     final prevManualActive = _manualPlan.active;
 
@@ -886,7 +889,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 if (slot.year == 4 && slot.sem == 2 && internshipCourse != null)
                   _buildInternshipCard(
                     internshipCourse,
-                    locked: _isSlotLocked(4, 2) || _internshipLocked,
+                    locked: _internshipLocked,
                     isPreview: 4 > profile.currentYear,
                     manualPlanMode: _manualPlan.active,
                     onRemove: _manualPlan.active && _manualPlanner.allPlannedKeys(_manualPlan).contains(internshipCourse.key)
@@ -1086,6 +1089,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       onRemoveCourse: manualPlanMode
           ? (c) => _removeCourseFromSlot(slot.year, slot.sem, c)
           : null,
+      onFinishSemester: onFinishSemester,
     );
   }
 
