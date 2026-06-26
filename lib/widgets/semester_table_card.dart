@@ -19,6 +19,7 @@ class SemesterTableCard extends StatelessWidget {
   final void Function(Course course, String grade) onGradeChanged;
   final VoidCallback? onAddCourse;
   final void Function(Course course)? onRemoveCourse;
+  final VoidCallback? onFinishSemester;
 
   const SemesterTableCard({
     super.key,
@@ -35,6 +36,7 @@ class SemesterTableCard extends StatelessWidget {
     this.onStreamChanged,
     this.onAddCourse,
     this.onRemoveCourse,
+    this.onFinishSemester,
   });
 
   bool get _showStreamPicker =>
@@ -285,6 +287,21 @@ class SemesterTableCard extends StatelessWidget {
                   foregroundColor: AppColors.aastuGold,
                   side: BorderSide(
                     color: AppColors.aastuGold.withValues(alpha: 0.5),
+                  ),
+                ),
+              ),
+            ),
+          if (onFinishSemester != null)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              child: OutlinedButton.icon(
+                onPressed: onFinishSemester,
+                icon: const Icon(Icons.check_circle_outline, size: 18, color: AppColors.success),
+                label: const Text('Finished this semester'),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: AppColors.success,
+                  side: BorderSide(
+                    color: AppColors.success.withValues(alpha: 0.5),
                   ),
                 ),
               ),

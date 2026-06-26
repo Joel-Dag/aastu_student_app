@@ -170,6 +170,24 @@ class _DashboardScreenState extends State<DashboardScreen> {
     _recomputeAnalysis();
   }
 
+  Future<void> _confirmFinishSemester(int year, int sem) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppColors.cardDark,
+        title: const Text('Finished this semester?'),
+        content: Text('Have you finished Year $year Semester $sem? This will move it to Past Semesters.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('No')),
+          ElevatedButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Yes')),
+        ],
+      ),
+    );
+    if (confirmed == true) {
+      await _toggleFinishedSlot(year, sem, true);
+    }
+  }
+
   String _academicStatusMessage(Set<String> failures, int currentYear) {
     if (failures.isNotEmpty) return '';
 
@@ -635,6 +653,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       courses: _courses,
       targetCgpa: target,
       plannedStream: stream,
+      finishedSlots: _finishedSlots,
     );
 
     setState(() {
