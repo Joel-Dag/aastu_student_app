@@ -153,10 +153,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
   bool _isSlotFinished(int year, int sem) =>
       _finishedSlots.contains(StorageService.slotKey(year, sem));
 
-  bool _isSlotPast(int year, int sem, int currentYear) {
-    return year < currentYear || _isSlotFinished(year, sem);
-  }
-
   Future<void> _toggleFinishedSlot(int year, int sem, bool finished) async {
     final key = StorageService.slotKey(year, sem);
     setState(() {
@@ -831,7 +827,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 if (slot.year == 4 && slot.sem == 2 && internshipCourse != null)
                   _buildInternshipCard(
                     internshipCourse,
-                    locked: _isSlotLocked(4, 2),
+                    locked: _isSlotLocked(4, 2) || _internshipLocked,
                     isPreview: 4 > profile.currentYear,
                     manualPlanMode: _manualPlan.active,
                     onRemove: _manualPlan.active && _manualPlanner.allPlannedKeys(_manualPlan).contains(internshipCourse.key)
