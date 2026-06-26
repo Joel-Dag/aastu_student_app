@@ -65,4 +65,21 @@ const eceStreams = [
 
 const departments = [
   'Electrical & Computer Engineering',
+  'Civil Engineering',
+  'Mechanical Engineering',
+  'Software Engineering',
+  'ElectroMechanical Engineering',
+  'Environmental Engineering',
+  'Mining Engineering',
+  'Chemical Engineering',
 ];
+
+const comingSoonDepartments = {
+  'Civil Engineering',
+  'Mechanical Engineering',
+  'Software Engineering',
+  'ElectroMechanical Engineering',
+  'Environmental Engineering',
+  'Mining Engineering',
+  'Chemical Engineering',
+};

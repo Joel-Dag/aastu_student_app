@@ -332,7 +332,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Future<void> _showLockDialog() async {
     if (_profile == null) return;
 
-    final slots = _academic.lockableSemesters(_profile!.currentYear);
+    final slots = [
+      for (var year = 1; year <= 5; year++)
+        for (var sem = 1; sem <= 2; sem++)
+          (year: year, sem: sem),
+    ];
     final selected = Set<String>.from(_lockedSlots);
     var internshipLocked = _internshipLocked;
 
@@ -341,6 +345,40 @@ class _DashboardScreenState extends State<DashboardScreen> {
       builder: (ctx) {
         return StatefulBuilder(
           builder: (context, setDialog) {
+            final children = <Widget>[];
+            for (final slot in slots) {
+              final key = StorageService.slotKey(slot.year, slot.sem);
+              final checked = selected.contains(key);
+              children.add(CheckboxListTile(
+                value: checked,
+                activeColor: AppColors.aastuGold,
+                title: Text('Year ${slot.year} • Semester ${slot.sem}'),
+                onChanged: (v) {
+                  setDialog(() {
+                    if (v == true) {
+                      selected.add(key);
+                    } else {
+                      selected.remove(key);
+                    }
+                  });
+                },
+              ));
+              if (slot.year == 4 && slot.sem == 2) {
+                children.add(
+                  CheckboxListTile(
+                    value: internshipLocked,
+                    activeColor: AppColors.aastuGold,
+                    title: const Text('Lock Industry Internship grade'),
+                    onChanged: (v) {
+                      setDialog(() {
+                        internshipLocked = v == true;
+                      });
+                    },
+                  ),
+                );
+              }
+            }
+
             return AlertDialog(
               backgroundColor: AppColors.cardDark,
               title: const Text('Lock Semesters'),
@@ -355,38 +393,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       style: TextStyle(color: Colors.white70, fontSize: 13),
                     ),
                     const SizedBox(height: 16),
-                    CheckboxListTile(
-                      value: internshipLocked,
-                      activeColor: AppColors.aastuGold,
-                      title: const Text('Lock Industry Internship grade'),
-                      onChanged: (v) {
-                        setDialog(() {
-                          internshipLocked = v == true;
-                        });
-                      },
-                    ),
-                    const SizedBox(height: 16),
                     Flexible(
                       child: ListView(
                         shrinkWrap: true,
-                        children: slots.map((slot) {
-                          final key = StorageService.slotKey(slot.year, slot.sem);
-                          final checked = selected.contains(key);
-                          return CheckboxListTile(
-                            value: checked,
-                            activeColor: AppColors.aastuGold,
-                            title: Text('Year ${slot.year} • Semester ${slot.sem}'),
-                            onChanged: (v) {
-                              setDialog(() {
-                                if (v == true) {
-                                  selected.add(key);
-                                } else {
-                                  selected.remove(key);
-                                }
-                              });
-                            },
-                          );
-                        }).toList(),
+                        children: children,
                       ),
                     ),
                   ],

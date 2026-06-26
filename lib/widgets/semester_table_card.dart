@@ -139,6 +139,20 @@ class SemesterTableCard extends StatelessWidget {
                       ),
                     ],
                     const Spacer(),
+                    if (onFinishSemester != null)
+                      Padding(
+                        padding: const EdgeInsets.only(right: 8),
+                        child: OutlinedButton.icon(
+                          onPressed: onFinishSemester,
+                          icon: const Icon(Icons.check_circle_outline, size: 18, color: AppColors.success),
+                          label: const Text('Finished', style: TextStyle(fontSize: 12)),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: AppColors.success,
+                            side: BorderSide(color: AppColors.success.withValues(alpha: 0.5)),
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                          ),
+                        ),
+                      ),
                     if (manualPlanMode || sgpa != null)
                       Column(
                         crossAxisAlignment: CrossAxisAlignment.end,
@@ -287,21 +301,6 @@ class SemesterTableCard extends StatelessWidget {
                   foregroundColor: AppColors.aastuGold,
                   side: BorderSide(
                     color: AppColors.aastuGold.withValues(alpha: 0.5),
-                  ),
-                ),
-              ),
-            ),
-          if (onFinishSemester != null)
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              child: OutlinedButton.icon(
-                onPressed: onFinishSemester,
-                icon: const Icon(Icons.check_circle_outline, size: 18, color: AppColors.success),
-                label: const Text('Finished this semester'),
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: AppColors.success,
-                  side: BorderSide(
-                    color: AppColors.success.withValues(alpha: 0.5),
                   ),
                 ),
               ),

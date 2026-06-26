@@ -217,9 +217,28 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
             initialValue: _department,
             decoration: const InputDecoration(labelText: 'Department'),
             items: departments
-                .map((d) => DropdownMenuItem(value: d, child: Text(d, style: const TextStyle(fontSize: 14))))
+                .map((d) {
+                  final isComingSoon = comingSoonDepartments.contains(d);
+                  return DropdownMenuItem(
+                    value: d,
+                    enabled: !isComingSoon,
+                    child: Text(
+                      isComingSoon ? '$d (Coming soon)' : d,
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: isComingSoon ? Colors.white38 : null,
+                      ),
+                    ),
+                  );
+                })
                 .toList(),
-            onChanged: (v) => setState(() => _department = v!),
+            onChanged: (v) {
+              if (v == null) return;
+              final isComingSoon = comingSoonDepartments.contains(v);
+              if (!isComingSoon) {
+                setState(() => _department = v);
+              }
+            },
           ),
           const SizedBox(height: 20),
           const Text('Current Year', style: TextStyle(fontWeight: FontWeight.w600)),
