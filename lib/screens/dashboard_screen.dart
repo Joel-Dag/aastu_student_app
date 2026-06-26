@@ -809,6 +809,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         .where((slot) => !_finishedSlots.contains(StorageService.slotKey(slot.year, slot.sem)))
         .toList();
     final incCount = _academic.countIncomplete(_courses);
+    final outbatchSlots = _outbatchSlots();
     final anyLocked = _lockedSlots.isNotEmpty;
     final failures = _manualPlanner.unclearedFailures(_courses);
     final internshipCourse = _findInternshipCourse(stream);
@@ -894,6 +895,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   ),
               ],
             ],
+            const SizedBox(height: 12),
+            _buildOutbatchSection(stream, outbatchSlots),
             const SizedBox(height: 80),
           ],
         ),
@@ -1083,6 +1086,83 @@ class _DashboardScreenState extends State<DashboardScreen> {
       onRemoveCourse: manualPlanMode
           ? (c) => _removeCourseFromSlot(slot.year, slot.sem, c)
           : null,
+    );
+  }
+
+  Widget _buildOutbatchSection(String stream, List<({int year, int sem})> outbatchSlots) {
+    if (outbatchSlots.isEmpty) {
+      return Card(
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: const [
+                  Icon(Icons.schedule, color: AppColors.aastuGold),
+                  SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Need more time after Year 5 Sem 2? Add an outbatch semester.',
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              const Text(
+                'Add an outbatch semester to plan extra courses with the same Add Course workflow and a 20 CH cap.',
+                style: TextStyle(color: Colors.white70, fontSize: 12),
+              ),
+              const SizedBox(height: 16),
+              Align(
+                alignment: Alignment.centerRight,
+                child: ElevatedButton.icon(
+                  onPressed: _addOutbatchSemesterSlot,
+                  icon: const Icon(Icons.add),
+                  label: const Text('Add outbatch semester'),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _sectionTitle('Outbatch Semesters', Icons.school),
+        ...outbatchSlots.map((slot) => _buildSemesterCard(
+              slot,
+              stream,
+              isPast: false,
+              showPlannedOnly: false,
+              onFinishSemester: !_isSlotFinished(slot.year, slot.sem)
+                  ? () => _confirmFinishSemester(slot.year, slot.sem)
+                  : null,
+            )),
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Row(
+              children: [
+                const Expanded(
+                  child: Text(
+                    'Add another outbatch semester if you need more coursework beyond the current plan.',
+                    style: TextStyle(color: Colors.white70, fontSize: 12),
+                  ),
+                ),
+                ElevatedButton.icon(
+                  onPressed: _addOutbatchSemesterSlot,
+                  icon: const Icon(Icons.add),
+                  label: const Text('Add another'),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
     );
   }
 
